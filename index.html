@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EPL Score Predictor</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;600&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --cream:#15120e;--white:#211c16;--s100:#2b251e;--s200:#3a332a;--s400:#8a8073;
+  --s600:#b3a99b;--s800:#e9e2d6;--ink:#f5efe4;
+  --hope:#ff5069;--hope-d:#e0384f;--hope-l:#3a1720;
+  --green:#34d17f;--green-l:#12241a;
+  --amber:#f0b24a;--amber-l:#2a2113;
+  --blue:#6aa0ff;--blue-l:#16213a;
+  --line:#4a3b1a;--line-b:#2b3f66;
+  --r:12px;--r-sm:8px;
+  --shadow:0 2px 8px rgba(0,0,0,.35);
+  --shadow-lg:0 8px 24px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'DM Sans',sans-serif;background:var(--cream);color:var(--ink);min-height:100vh;font-size:15px;line-height:1.5}
+h1,h2,.serif{font-family:'Playfair Display',serif}
+button{cursor:pointer;font-family:inherit;font-size:15px;border:none;outline:none}
+select{font-family:inherit;font-size:15px;outline:none}
+.mono{font-family:'DM Mono',monospace}
+
+.wrap{max-width:760px;margin:0 auto;padding:0 16px 48px}
+
+/* header */
+#hdr{display:flex;align-items:center;gap:12px;padding:18px 16px;background:var(--white);border-bottom:1px solid var(--s200);position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+#hdr .logo{width:34px;height:34px;background:var(--hope);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:600;font-size:12px;letter-spacing:.02em;flex-shrink:0}
+#hdr .ttl{font-weight:600;font-size:16px;flex:1;line-height:1.2}
+#hdr .ttl small{display:block;font-weight:400;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--s600)}
+.ibtn{background:var(--s100);width:38px;height:38px;border-radius:8px;font-size:17px;display:flex;align-items:center;justify-content:center;transition:background .15s}
+.ibtn:hover{background:var(--s200)}
+.ibtn:disabled{opacity:.5;cursor:default}
+
+/* controls */
+.ctrl{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:18px 0 6px}
+.ctrl label{font-size:11px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--s600)}
+select.sel{padding:8px 30px 8px 12px;border:1.5px solid var(--s200);border-radius:var(--r-sm);background:var(--white);color:var(--ink);appearance:none;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%23b8b0a4' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+select.sel:focus{border-color:var(--hope)}
+
+/* intro */
+.intro{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:18px 20px;margin:16px 0}
+.intro h1{font-size:22px;margin-bottom:6px}
+.intro p{font-size:14px;color:var(--s600)}
+.disclaim{margin-top:10px;font-size:12px;color:var(--amber);background:var(--amber-l);border:1px solid var(--line);border-radius:var(--r-sm);padding:8px 10px}
+
+/* status */
+.status{padding:12px 14px;border-radius:var(--r-sm);font-size:13px;font-weight:500;margin:14px 0}
+.status.info{background:var(--blue-l);color:var(--blue);border:1px solid var(--line-b)}
+.status.warn{background:var(--amber-l);color:var(--amber);border:1px solid var(--line)}
+.status.err{background:#2a1414;color:#ff8f8f;border:1px solid #5a2626}
+
+/* fixture card */
+.fx{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;margin:14px 0}
+.fx .meta{font-size:11px;letter-spacing:.05em;text-transform:uppercase;color:var(--s400);margin-bottom:12px}
+.fx .teams{display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px}
+.fx .team{display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center}
+.fx .team.away{order:3}
+.fx .team img{width:40px;height:40px;object-fit:contain}
+.fx .team .nm{font-weight:600;font-size:14px;line-height:1.15}
+.fx .score{display:flex;align-items:center;gap:8px;font-family:'Playfair Display',serif;font-size:30px;font-weight:600}
+.fx .score .x{font-size:16px;color:var(--s400)}
+.fx .pred-lbl{text-align:center;font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--s400);margin-top:2px}
+
+/* prob bar */
+.pbar{display:flex;height:26px;border-radius:6px;overflow:hidden;margin:16px 0 8px;font-size:11px;font-weight:600;color:#fff}
+.pbar .seg{display:flex;align-items:center;justify-content:center;min-width:0;white-space:nowrap;transition:flex-basis .3s}
+.pbar .home{background:var(--hope)}
+.pbar .draw{background:var(--s400)}
+.pbar .awy{background:var(--blue)}
+.plegend{display:flex;justify-content:space-between;font-size:11px;color:var(--s600)}
+.plegend span b{font-weight:600;color:var(--ink)}
+
+/* why / alternatives */
+.why{margin-top:14px;border-top:1px solid var(--s100);padding-top:12px;font-size:12px;color:var(--s600);display:flex;flex-wrap:wrap;gap:6px 18px}
+.why b{color:var(--ink);font-weight:600}
+.alts{margin-top:10px;display:flex;gap:8px;flex-wrap:wrap}
+.alt{font-family:'DM Mono',monospace;font-size:12px;background:var(--s100);border-radius:6px;padding:4px 8px;color:var(--s800)}
+.alt span{color:var(--s600)}
+
+/* likely scorers */
+.scorers{margin-top:14px;border-top:1px solid var(--s100);padding-top:12px;display:grid;grid-template-columns:1fr 1fr;gap:10px 18px}
+.sc-col{display:flex;flex-direction:column;gap:6px;min-width:0}
+.sc-lbl{font-size:10px;letter-spacing:.06em;text-transform:uppercase;color:var(--s400)}
+.sc{font-size:13px;color:var(--s800);display:flex;justify-content:space-between;gap:8px}
+.sc b{font-family:'DM Mono',monospace;font-weight:500;color:var(--hope)}
+.sc.none{color:var(--s400)}
+
+/* confidence + derived odds */
+.conf{text-align:center;font-size:13px;color:var(--s800);margin-top:12px}
+.conf b{color:var(--hope);font-weight:600}
+.odds{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.chip{display:flex;flex-direction:column;align-items:center;gap:2px;background:var(--s100);border-radius:var(--r-sm);padding:6px 10px;flex:1;min-width:64px}
+.chip span{font-size:10px;letter-spacing:.04em;text-transform:uppercase;color:var(--s600);text-align:center;line-height:1.2}
+.chip b{font-family:'DM Mono',monospace;font-size:15px;font-weight:500;color:var(--ink)}
+
+.foot{text-align:center;font-size:11px;color:var(--s400);margin-top:28px;line-height:1.6}
+.foot a{color:var(--s600)}
+
+.skel{background:var(--white);border-radius:var(--r);box-shadow:var(--shadow);padding:16px 18px;margin:14px 0;height:120px;
+  background-image:linear-gradient(90deg,var(--white) 0,var(--s100) 40px,var(--white) 80px);background-size:600px;animation:sh 1.2s infinite linear}
+@keyframes sh{0%{background-position:-200px}100%{background-position:400px}}
+
+@media(max-width:480px){.fx .score{font-size:24px}.fx .team img{width:34px;height:34px}}
+</style>
+</head>
+<body>
+
+<div id="hdr">
+  <div class="ttl">EPL Score Predictor<small>Premier League · auto forecast</small></div>
+  <button class="ibtn" id="refresh" title="Refresh">&#8635;</button>
+</div>
+
+<div class="wrap">
+  <div class="intro">
+    <h1>Predicted scorelines</h1>
+    <p>Every fixture in the selected gameweek, each run through 10,000 Monte-Carlo simulations
+       built from team strength and recent form — giving a most-likely scoreline, result
+       confidence, match odds (both teams to score, over 2.5, clean sheets, upset), and the
+       most likely scorers for each side.</p>
+    <div class="disclaim">For fun and interest only — not betting advice. Predictions are statistical estimates, not certainties.</div>
+  </div>
+
+  <div class="ctrl">
+    <label for="gw">Gameweek</label>
+    <select class="sel" id="gw"></select>
+  </div>
+
+  <div id="status" class="status info" style="display:none"></div>
+  <div id="list"></div>
+
+  <div class="foot">
+    Data from the <a href="https://fantasy.premierleague.com" target="_blank" rel="noopener">official Fantasy Premier League API</a>, refreshed periodically.<br>
+    Model: expected goals from home/away attack &amp; defence strength + recent form, then
+    10,000 Monte-Carlo simulations per match with a Dixon-Coles low-score adjustment.
+    Scorer picks combine player form, expected goals and each side's predicted goals.
+  </div>
+</div>
+
+<script>
+"use strict";
+(function(){
+  const DATA_BOOT = "data/bootstrap.json";  // static FPL snapshots (refreshed by GitHub Action)
+  const DATA_FIX  = "data/fixtures.json";
+  const MAXG = 6;               // goal grid 0..MAXG per side
+  const HOME_ADV = 1.35, AWAY_ADJ = 0.75; // home/away split
+  const FORM_N = 5;             // matches used for form
+  const FORM_MAX = 0.15;        // max +/- form nudge to expected goals
+  const SIMS = 10000;           // Monte Carlo simulations per match
+  const DC_RHO = -0.13;         // Dixon-Coles low-score dependence (typical EPL value)
+  const TIER_SPREAD = 0.17;     // goals multiplier per step of FPL's 1-5 strength tiers
+  const N_SCORERS = 2;          // likely scorers shown per team
+  const CREST = code => "https://resources.premierleague.com/premierleague/badges/70/t" + code + ".png";
+
+  const $ = id => document.getElementById(id);
+  const listEl = $("list"), statusEl = $("status"), gwSel = $("gw");
+
+  // ---- helpers --------------------------------------------------------------
+  const num = v => { const n = parseFloat(v); return isFinite(n) ? n : 0; };
+  const pad2 = n => String(n).padStart(2, "0");
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  function setStatus(msg, kind){
+    if(!msg){ statusEl.style.display = "none"; return; }
+    statusEl.className = "status " + (kind || "info");
+    statusEl.textContent = msg;
+    statusEl.style.display = "block";
+  }
+
+  async function getJSON(url){
+    const r = await fetch(url, { headers:{ "Accept":"application/json" } });
+    if(!r.ok) throw new Error("HTTP " + r.status);
+    return r.json();
+  }
+
+  // ---- Poisson model --------------------------------------------------------
+  function fact(n){ let f = 1; for(let i = 2; i <= n; i++) f *= i; return f; }
+  function pois(k, lambda){ return Math.pow(lambda, k) * Math.exp(-lambda) / fact(k); }
+
+  // Build per-team attack/defence from FPL data. Once ~2 rounds of results are
+  // in we use real goals for/against; before that we fall back to FPL's 1-5
+  // overall strength tiers so early-season predictions are still sensible.
+  function buildStrengthsFPL(teamsArr, finished){
+    const teams = {};
+    teamsArr.forEach(t => {
+      teams[t.id] = { id: t.id, name: t.name, code: t.code,
+        tierH: num(t.strength_overall_home), tierA: num(t.strength_overall_away),
+        gf: 0, ga: 0, played: 0 };
+    });
+    finished.forEach(fx => {
+      const h = teams[fx.team_h], a = teams[fx.team_a];
+      if(!h || !a || fx.team_h_score == null || fx.team_a_score == null) return;
+      const hs = num(fx.team_h_score), as = num(fx.team_a_score);
+      h.gf += hs; h.ga += as; h.played += 1;
+      a.gf += as; a.ga += hs; a.played += 1;
+    });
+
+    const totGames = Object.values(teams).reduce((s, t) => s + t.played, 0);
+    const goalsMode = totGames >= 40; // ~2 full rounds of results across the league
+
+    let leagueAvg = 1.35;
+    if(goalsMode){
+      let totFor = 0, totPl = 0;
+      Object.values(teams).forEach(t => { totFor += t.gf; totPl += t.played; });
+      leagueAvg = totPl > 0 ? totFor / totPl : 1.35;
+      Object.values(teams).forEach(t => {
+        const af = t.played > 0 ? t.gf / t.played : leagueAvg;
+        const ag = t.played > 0 ? t.ga / t.played : leagueAvg;
+        t.attack  = leagueAvg > 0 ? af / leagueAvg : 1;   // >1 = scores more than avg
+        t.defence = leagueAvg > 0 ? ag / leagueAvg : 1;   // >1 = concedes more than avg
+      });
+    } else {
+      // tier-based: FPL rates each side 1-5 overall (3 = mid-table). A stronger
+      // side both scores more and concedes fewer than average.
+      Object.values(teams).forEach(t => {
+        const tier = ((t.tierH || 3) + (t.tierA || 3)) / 2;
+        t.attack  = 1 + (tier - 3) * TIER_SPREAD;
+        t.defence = 1 - (tier - 3) * TIER_SPREAD;
+      });
+    }
+    return { teams, leagueAvg, goalsMode };
+  }
+
+  // Likely scorers for a team, as anytime-scorer probabilities. Players are
+  // ranked by a form-weighted attacking index (recent form + xG/90 + goals so
+  // far), then each gets a share of the team's predicted goals for this match;
+  // P(scores) = 1 - e^(-share * teamGoals).
+  function topScorers(playersOfTeam, teamGoals){
+    const pool = playersOfTeam
+      .filter(p => p.element_type !== 1 && p.status === "a" && num(p.minutes) > 0)
+      .map(p => {
+        const idx = 0.6 * num(p.expected_goals_per_90)
+                  + 0.15 * num(p.goals_scored)
+                  + 0.25 * (num(p.form) / 10);           // FPL form is recent avg points
+        return { name: p.web_name, idx };
+      })
+      .filter(p => p.idx > 0)
+      .sort((a, b) => b.idx - a.idx);
+    if(!pool.length) return [];
+    const totIdx = pool.reduce((s, p) => s + p.idx, 0) || 1;
+    return pool.slice(0, N_SCORERS).map(p => {
+      const share = p.idx / totIdx;
+      const lambda = share * teamGoals;                  // expected goals for this player
+      return { name: p.name, p: 1 - Math.exp(-lambda) };
+    });
+  }
+
+  // Recent form factor per team id (from finished fixtures), range ~[1-FORM_MAX, 1+FORM_MAX]
+  function buildForm(finished){
+    const games = (finished || []).slice().sort((x, y) =>
+      String(y.kickoff_time || "").localeCompare(String(x.kickoff_time || ""))); // newest first
+    const acc = {}; // id -> {pts, n}
+    games.forEach(fx => {
+      if(fx.team_h_score == null || fx.team_a_score == null) return;
+      const hs = num(fx.team_h_score), as = num(fx.team_a_score);
+      [[fx.team_h, hs, as],[fx.team_a, as, hs]].forEach(([id, gf, ga]) => {
+        if(!id) return;
+        acc[id] = acc[id] || { pts:0, n:0 };
+        if(acc[id].n >= FORM_N) return;
+        acc[id].pts += gf > ga ? 3 : (gf === ga ? 1 : 0);
+        acc[id].n += 1;
+      });
+    });
+    const form = {};
+    Object.entries(acc).forEach(([id, v]) => {
+      if(v.n === 0){ form[id] = 1; return; }
+      const ppg = v.pts / v.n;               // 0..3
+      form[id] = 1 + ((ppg - 1.5) / 1.5) * FORM_MAX; // 1.5ppg = neutral
+    });
+    return form;
+  }
+
+  // Dixon-Coles low-score correction factor. Nudges the 0-0/1-0/0-1/1-1 cells to
+  // fix plain Poisson's under-prediction of low-scoring results in football.
+  function dcTau(x, y, lh, la, rho){
+    if(x === 0 && y === 0) return 1 - lh * la * rho;
+    if(x === 0 && y === 1) return 1 + lh * rho;
+    if(x === 1 && y === 0) return 1 + la * rho;
+    if(x === 1 && y === 1) return 1 - rho;
+    return 1;
+  }
+
+  // Dixon-Coles adjusted joint scoreline distribution (flat array of {h,a,p}, normalised).
+  function dcMatrix(lh, la, rho){
+    const cells = [];
+    let tot = 0;
+    for(let h = 0; h <= MAXG; h++){
+      for(let a = 0; a <= MAXG; a++){
+        const p = Math.max(0, pois(h, lh) * pois(a, la) * dcTau(h, a, lh, la, rho));
+        cells.push({ h, a, p });
+        tot += p;
+      }
+    }
+    if(tot > 0) cells.forEach(c => c.p /= tot);
+    return cells;
+  }
+
+  // Small seeded PRNG so results are stable across refreshes (no jitter each load).
+  function mulberry32(seed){
+    let s = seed >>> 0;
+    return function(){
+      s |= 0; s = (s + 0x6D2B79F5) | 0;
+      let t = Math.imul(s ^ (s >>> 15), 1 | s);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function hashStr(str){
+    let h = 2166136261 >>> 0;
+    for(let i = 0; i < str.length; i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return h >>> 0;
+  }
+
+  // Run N Monte Carlo simulations by sampling scorelines from the DC matrix.
+  function simulate(cells, rng, N){
+    // cumulative distribution for O(log n)-ish sampling via linear scan (49 cells, trivial)
+    const cum = []; let acc = 0;
+    cells.forEach(c => { acc += c.p; cum.push(acc); });
+    const norm = acc || 1;
+
+    const freq = {};                       // "h-a" -> count
+    let homeW = 0, draw = 0, awayW = 0, btts = 0, csH = 0, csA = 0, over25 = 0;
+    for(let i = 0; i < N; i++){
+      const r = rng() * norm;
+      let lo = 0, hi = cum.length - 1;
+      while(lo < hi){ const mid = (lo + hi) >> 1; if(cum[mid] < r) lo = mid + 1; else hi = mid; }
+      const c = cells[lo];
+      const key = c.h + "-" + c.a;
+      freq[key] = (freq[key] || 0) + 1;
+      if(c.h > c.a) homeW++; else if(c.h === c.a) draw++; else awayW++;
+      if(c.h > 0 && c.a > 0) btts++;
+      if(c.a === 0) csH++;                  // home keeps a clean sheet
+      if(c.h === 0) csA++;                  // away keeps a clean sheet
+      if(c.h + c.a > 2) over25++;           // over 2.5 goals
+    }
+    // modal scoreline + top alternatives
+    const ranked = Object.entries(freq)
+      .map(([k, n]) => { const [h, a] = k.split("-").map(Number); return { h, a, p: n / N }; })
+      .sort((x, y) => y.p - x.p);
+
+    return {
+      best: ranked[0], alts: ranked.slice(1, 4), ranked,
+      pHome: homeW / N, pDraw: draw / N, pAway: awayW / N,
+      btts: btts / N, csHome: csH / N, csAway: csA / N, over25: over25 / N
+    };
+  }
+
+  function predict(home, away, leagueAvg, formH, formA, seed){
+    // expected goals with home advantage split and form nudge
+    let lh = leagueAvg * HOME_ADV * home.attack * away.defence * (formH || 1);
+    let la = leagueAvg * AWAY_ADJ * away.attack * home.defence * (formA || 1);
+    lh = Math.max(0.15, Math.min(lh, 6));
+    la = Math.max(0.15, Math.min(la, 6));
+
+    const cells = dcMatrix(lh, la, DC_RHO);
+    const sim = simulate(cells, mulberry32(seed >>> 0), SIMS);
+
+    // Favourite by simulated win share; an upset = the pre-sim underdog winning.
+    const upset = Math.min(sim.pHome, sim.pAway);
+
+    return {
+      lh, la, sims: SIMS,
+      best: sim.best, alts: sim.alts, ranked: sim.ranked,
+      pHome: sim.pHome, pDraw: sim.pDraw, pAway: sim.pAway,
+      btts: sim.btts, csHome: sim.csHome, csAway: sim.csAway, over25: sim.over25,
+      upset
+    };
+  }
+
+  // ---- rendering ------------------------------------------------------------
+  function pct(x){ return Math.round(x * 100); }
+
+  function fixtureCard(ev, pr){
+    const dt = ev.dateEvent ? new Date(ev.dateEvent + "T" + (ev.strTime || "00:00:00")) : null;
+    const when = dt && !isNaN(dt) ? dt.toLocaleDateString(undefined,
+      { weekday:"short", day:"numeric", month:"short" }) + (ev.strTime ? " · " + ev.strTime.slice(0,5) : "") : "Date TBC";
+    const badge = (u, nm) => u
+      ? '<img src="'+esc(u)+'" alt="'+esc(nm)+'" loading="lazy" onerror="this.style.display=\'none\'">' : "";
+    // Predicted result (most likely of the three outcomes) and the scoreline we
+    // headline: the top simulated score that MATCHES that result, so the big
+    // score never contradicts the "X win" call (e.g. 2-1 for a predicted win,
+    // not an overall-modal 1-1 draw).
+    let sign = "d", resLbl = "Draw", resP = pr.pDraw;
+    if(pr.pHome >= pr.pDraw && pr.pHome >= pr.pAway){ sign = "h"; resLbl = esc(ev.strHomeTeam) + " win"; resP = pr.pHome; }
+    else if(pr.pAway >= pr.pDraw && pr.pAway >= pr.pHome){ sign = "a"; resLbl = esc(ev.strAwayTeam) + " win"; resP = pr.pAway; }
+    const matchesResult = c => sign === "h" ? c.h > c.a : sign === "a" ? c.h < c.a : c.h === c.a;
+    const ranked = pr.ranked || (pr.best ? [pr.best] : []);
+    const headline = ranked.find(matchesResult) || pr.best;
+
+    // Finished match: headline the ACTUAL score and grade the model's call.
+    const fin = pr.actual || null;
+    const bigH = fin ? fin.h : headline.h;
+    const bigA = fin ? fin.a : headline.a;
+    const scoreLabel = fin ? "final score" : "likely score";
+    let conf;
+    if(fin){
+      const actSign = fin.h > fin.a ? "h" : fin.h < fin.a ? "a" : "d";
+      const ok = actSign === sign;
+      conf = (ok ? "✓ " : "✗ ") + "Model predicted <b>" + resLbl + "</b> ("
+           + pct(resP) + "%) · would-be score " + headline.h + "–" + headline.a;
+    } else {
+      conf = "Predicted: <b>" + resLbl + "</b> — " + pct(resP) + "% of " + pr.sims.toLocaleString() + " sims";
+    }
+
+    // other simulated scores (excluding the headline), most likely first
+    const alts = ranked.filter(c => c !== headline).slice(0, 3)
+      .map(c => '<span class="alt">'+c.h+'<span>–</span>'+c.a+' <span>'+pct(c.p)+'%</span></span>').join("");
+
+    // Likely scorers (anytime) per side, from FPL form + expected goals.
+    const scList = arr => (arr && arr.length)
+      ? arr.map(s => '<span class="sc">'+esc(s.name)+' <b>'+pct(s.p)+'%</b></span>').join("")
+      : '<span class="sc none">—</span>';
+    const scorers = (pr.scHome || pr.scAway)
+      ? '<div class="scorers">'
+        + '<div class="sc-col"><span class="sc-lbl">Likely scorers · anytime</span>' + scList(pr.scHome) + '</div>'
+        + '<div class="sc-col"><span class="sc-lbl">&nbsp;</span>' + scList(pr.scAway) + '</div>'
+        + '</div>'
+      : '';
+
+    const chip = (lbl, v) => '<span class="chip"><span>'+lbl+'</span><b>'+pct(v)+'%</b></span>';
+    const odds = chip("Both score", pr.btts)
+               + chip("Over 2.5", pr.over25)
+               + chip("CS "+esc(ev.strHomeTeam), pr.csHome)
+               + chip("CS "+esc(ev.strAwayTeam), pr.csAway)
+               + chip("Upset", pr.upset);
+
+    return ''
+    + '<div class="fx">'
+    +   '<div class="meta">'+esc(when)+' · '+esc(ev.strVenue || "Premier League")+'</div>'
+    +   '<div class="teams">'
+    +     '<div class="team home">'+badge(ev.strHomeTeamBadge, ev.strHomeTeam)+'<div class="nm">'+esc(ev.strHomeTeam)+'</div></div>'
+    +     '<div><div class="score">'+bigH+'<span class="x">–</span>'+bigA+'</div><div class="pred-lbl">'+scoreLabel+'</div></div>'
+    +     '<div class="team away">'+badge(ev.strAwayTeamBadge, ev.strAwayTeam)+'<div class="nm">'+esc(ev.strAwayTeam)+'</div></div>'
+    +   '</div>'
+    +   '<div class="conf">'+conf+'</div>'
+    +   '<div class="pbar">'
+    +     '<div class="seg home" style="flex-basis:'+pct(pr.pHome)+'%">'+(pr.pHome>0.12?pct(pr.pHome)+'%':'')+'</div>'
+    +     '<div class="seg draw" style="flex-basis:'+pct(pr.pDraw)+'%">'+(pr.pDraw>0.12?pct(pr.pDraw)+'%':'')+'</div>'
+    +     '<div class="seg awy"  style="flex-basis:'+pct(pr.pAway)+'%">'+(pr.pAway>0.12?pct(pr.pAway)+'%':'')+'</div>'
+    +   '</div>'
+    +   '<div class="plegend"><span><b>'+esc(ev.strHomeTeam)+'</b> win</span><span>Draw</span><span><b>'+esc(ev.strAwayTeam)+'</b> win</span></div>'
+    +   '<div class="odds">'+odds+'</div>'
+    +   '<div class="why">'
+    +     '<span>Expected goals — <b>'+pr.lh.toFixed(2)+'</b> vs <b>'+pr.la.toFixed(2)+'</b></span>'
+    +     '<span>Other simulated scores:</span>'
+    +   '</div>'
+    +   '<div class="alts">'+alts+'</div>'
+    +   scorers
+    + '</div>';
+  }
+
+  // ---- main flow ------------------------------------------------------------
+  let BOOT = null, FIX = null;   // cached raw FPL data (bootstrap + fixtures)
+
+  async function fetchData(){
+    const [boot, fix] = await Promise.all([
+      getJSON(DATA_BOOT),
+      getJSON(DATA_FIX)
+    ]);
+    BOOT = boot; FIX = Array.isArray(fix) ? fix : [];
+  }
+
+  // Every gameweek that has fixtures, ascending (played and upcoming).
+  function allGameweeks(){
+    const set = {};
+    FIX.forEach(fx => { if(fx.event) set[fx.event] = true; });
+    return Object.keys(set).map(Number).sort((a, b) => a - b);
+  }
+  // First gameweek that still has an unplayed fixture (else the last one).
+  function nextGameweek(gws){
+    const up = gws.find(g => FIX.some(fx => fx.event === g && !fx.finished));
+    return up != null ? up : gws[gws.length - 1];
+  }
+  function gwIsPlayed(g){ return !FIX.some(fx => fx.event === g && !fx.finished); }
+
+  function renderGW(gw){
+    const teamsArr = BOOT.teams || [];
+    const meta = {}; teamsArr.forEach(t => meta[t.id] = t);
+
+    // players grouped by team, for scorer prediction
+    const byTeam = {};
+    (BOOT.elements || []).forEach(p => { (byTeam[p.team] = byTeam[p.team] || []).push(p); });
+
+    const finished = FIX.filter(fx => fx.finished);
+    const { teams, leagueAvg, goalsMode } = buildStrengthsFPL(teamsArr, finished);
+    const form = buildForm(finished);
+
+    const fixtures = FIX
+      .filter(fx => fx.event === gw)
+      .sort((x, y) => String(x.kickoff_time || "").localeCompare(String(y.kickoff_time || "")));
+
+    if(!fixtures.length){
+      listEl.innerHTML = "";
+      setStatus("No fixtures scheduled for this gameweek.", "info");
+      return;
+    }
+
+    let graded = 0, correctResult = 0, exact = 0;   // model accuracy over finished games
+    const html = fixtures.map(fx => {
+      const hT = meta[fx.team_h], aT = meta[fx.team_a];
+      const ko = fx.kickoff_time ? new Date(fx.kickoff_time) : null;
+      // pass kickoff as the viewer's LOCAL wall-clock so fixtureCard shows local time
+      const ev = {
+        idEvent: fx.id, idHomeTeam: fx.team_h, idAwayTeam: fx.team_a,
+        strHomeTeam: hT ? hT.name : "Home", strAwayTeam: aT ? aT.name : "Away",
+        strHomeTeamBadge: hT ? CREST(hT.code) : "", strAwayTeamBadge: aT ? CREST(aT.code) : "",
+        strVenue: "Gameweek " + gw,
+        dateEvent: ko ? ko.getFullYear() + "-" + pad2(ko.getMonth() + 1) + "-" + pad2(ko.getDate()) : "",
+        strTime: ko ? pad2(ko.getHours()) + ":" + pad2(ko.getMinutes()) + ":00" : ""
+      };
+      const h = teams[fx.team_h], a = teams[fx.team_a];
+      const pr = predict(h, a, leagueAvg, form[fx.team_h], form[fx.team_a], hashStr(String(fx.id)));
+      pr.scHome = topScorers(byTeam[fx.team_h] || [], pr.lh);
+      pr.scAway = topScorers(byTeam[fx.team_a] || [], pr.la);
+      if(fx.finished && fx.team_h_score != null && fx.team_a_score != null){
+        pr.actual = { h: num(fx.team_h_score), a: num(fx.team_a_score) };
+        const ps = pr.pHome >= pr.pDraw && pr.pHome >= pr.pAway ? "h"
+                 : pr.pAway >= pr.pDraw && pr.pAway >= pr.pHome ? "a" : "d";
+        const as = pr.actual.h > pr.actual.a ? "h" : pr.actual.h < pr.actual.a ? "a" : "d";
+        graded++;
+        if(ps === as) correctResult++;
+        const match = c => ps === "h" ? c.h > c.a : ps === "a" ? c.h < c.a : c.h === c.a;
+        const hl = (pr.ranked || []).find(match) || pr.best;   // the "would-be score" shown on the card
+        if(hl && hl.h === pr.actual.h && hl.a === pr.actual.a) exact++;
+      }
+      return fixtureCard(ev, pr);
+    }).join("");
+
+    listEl.innerHTML = html;
+    const played = fixtures.filter(fx => fx.finished).length;
+    const base = goalsMode
+      ? "Ratings built from this season's results so far."
+      : "Season just underway — team ratings use FPL strength tiers until more results are in; scorer picks use current form and expected goals.";
+    const acc = graded
+      ? "Model called " + correctResult + "/" + graded + " results right (" + pct(correctResult / graded)
+        + "%), " + exact + " exact score" + (exact === 1 ? "" : "s") + ". "
+      : "";
+    if(played === fixtures.length){
+      setStatus("Gameweek " + gw + " complete — final scores with the model's pre-match call. " + acc + base, "info");
+    } else if(played){
+      setStatus(played + " of " + fixtures.length + " played this gameweek. " + acc + base, "info");
+    } else {
+      setStatus(base, "info");
+    }
+  }
+
+  // ---- init -----------------------------------------------------------------
+  async function loadAll(){
+    listEl.innerHTML = '<div class="skel"></div><div class="skel"></div><div class="skel"></div>';
+    setStatus("");
+    try {
+      await fetchData();
+    } catch(err){
+      listEl.innerHTML = "";
+      setStatus("Couldn't load the data files (" + (err && err.message || "network error")
+        + "). If viewing locally, serve the folder over http (e.g. run: python3 proxy.py) rather "
+        + "than opening index.html directly as a file, then tap refresh.", "err");
+      return;
+    }
+    const gws = allGameweeks();
+    if(!gws.length){ listEl.innerHTML = ""; setStatus("No gameweeks found.", "info"); return; }
+    const next = nextGameweek(gws);
+    gwSel.innerHTML = "";
+    gws.forEach(g => {
+      const o = document.createElement("option");
+      o.value = g;
+      o.textContent = "Gameweek " + g + (g === next ? " (next)" : gwIsPlayed(g) ? " (played)" : "");
+      gwSel.appendChild(o);
+    });
+    gwSel.value = String(next);
+    renderGW(next);
+  }
+
+  function init(){
+    gwSel.addEventListener("change", () => renderGW(Number(gwSel.value)));
+    $("refresh").addEventListener("click", loadAll);
+    loadAll();
+  }
+  init();
+})();
+</script>
+</body>
+</html>
