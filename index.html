@@ -91,6 +91,10 @@ select.sel:focus{border-color:var(--hope)}
 .sc b{font-family:'DM Mono',monospace;font-weight:500;color:var(--hope)}
 .sc.none{color:var(--s400)}
 
+/* squad availability note */
+.absent{margin-top:10px;font-size:12px;color:var(--amber);background:var(--amber-l);border:1px solid var(--line);border-radius:var(--r-sm);padding:6px 10px;line-height:1.5}
+.absent b{color:var(--ink);font-weight:600}
+
 /* confidence + derived odds */
 .conf{text-align:center;font-size:13px;color:var(--s800);margin-top:12px}
 .conf b{color:var(--hope);font-weight:600}
@@ -136,8 +140,9 @@ select.sel:focus{border-color:var(--hope)}
 
   <div class="foot">
     Data from the <a href="https://fantasy.premierleague.com" target="_blank" rel="noopener">official Fantasy Premier League API</a>, refreshed periodically.<br>
-    Model: expected goals from home/away attack &amp; defence strength + recent form, then
-    10,000 Monte-Carlo simulations per match with a Dixon-Coles low-score adjustment.
+    Model: expected goals from home/away attack &amp; defence strength + recent form, adjusted for
+    each side's likely-available attackers and their form, then 10,000 Monte-Carlo simulations per
+    match with a Dixon-Coles low-score adjustment.
     Scorer picks combine player form, expected goals and each side's predicted goals.
   </div>
 </div>
@@ -155,6 +160,10 @@ select.sel:focus{border-color:var(--hope)}
   const DC_RHO = -0.13;         // Dixon-Coles low-score dependence (typical EPL value)
   const TIER_SPREAD = 0.17;     // goals multiplier per step of FPL's 1-5 strength tiers
   const N_SCORERS = 2;          // likely scorers shown per team
+  const ATK_AVAIL_MIN = 0.80;   // most a team's attack can drop when key players are unavailable
+  const ATK_FORM_K = 0.02;      // scoreline sensitivity to squad attacking form
+  const ATK_FORM_CLAMP = 0.08;  // max +/- from squad attacking form
+  const ATK_OUT_THRESH = 0.75;  // list a key attacker as doubtful/out below this availability
   const CREST = code => "https://resources.premierleague.com/premierleague/badges/70/t" + code + ".png";
 
   const $ = id => document.getElementById(id);
@@ -249,6 +258,65 @@ select.sel:focus{border-color:var(--hope)}
       const lambda = share * teamGoals;                  // expected goals for this player
       return { name: p.name, p: 1 - Math.exp(-lambda) };
     });
+  }
+
+  // How likely a player is to feature next round, in [0,1]. FPL gives an
+  // explicit "chance of playing" for doubtful/injured players; otherwise a
+  // status of "a" (available) means fit and anything else means out.
+  function playerAvail(p){
+    if(p.chance_of_playing_next_round != null)
+      return Math.max(0, Math.min(1, num(p.chance_of_playing_next_round) / 100));
+    return p.status === "a" ? 1 : 0;
+  }
+  function absLabel(p){
+    if(p.chance_of_playing_next_round != null) return num(p.chance_of_playing_next_round) + "%";
+    return p.status === "i" ? "injured" : p.status === "s" ? "suspended"
+         : p.status === "u" ? "out" : p.status === "n" ? "out" : "doubtful";
+  }
+
+  // Per-team attacking adjustment from likely-available players and their form.
+  // Each team's attacking "threat" is its outfield players' expected goals per
+  // 90, weighted toward likely starters (by minutes). Missing/doubtful key
+  // attackers pull the team's expected goals down (availMul); in-form available
+  // attackers nudge it up a little (formMul). Returns a multiplier per team id
+  // plus the notable absentees to surface on the card.
+  function buildAttack(teamsArr, byTeam){
+    let refNum = 0, refDen = 0;   // league-wide threat-weighted attacking form (reference)
+    const per = {};
+    teamsArr.forEach(t => {
+      const squad = (byTeam[t.id] || []).filter(p => p.element_type !== 1 && num(p.minutes) > 0);
+      const maxMin = squad.reduce((m, p) => Math.max(m, num(p.minutes)), 0) || 1;
+      let full = 0, avail = 0, fNum = 0, fDen = 0;
+      const scored = squad.map(p => {
+        const w = Math.min(1, num(p.minutes) / maxMin);            // starter weight
+        const threat = Math.max(0, num(p.expected_goals_per_90)) * w;
+        const av = playerAvail(p);
+        full += threat; avail += threat * av;
+        const wt = threat * av;
+        fNum += wt * num(p.form); fDen += wt;
+        refNum += wt * num(p.form); refDen += wt;
+        return { p, threat, av };
+      });
+      per[t.id] = { scored, full, avail, fNum, fDen };
+    });
+    const refForm = refDen > 0 ? refNum / refDen : 0;
+
+    const out = {};
+    Object.keys(per).forEach(id => {
+      const s = per[id];
+      const availMul = s.full > 0 ? Math.max(ATK_AVAIL_MIN, Math.min(1, s.avail / s.full)) : 1;
+      const teamForm = s.fDen > 0 ? s.fNum / s.fDen : refForm;
+      const formMul = Math.max(1 - ATK_FORM_CLAMP, Math.min(1 + ATK_FORM_CLAMP,
+        1 + ATK_FORM_K * (teamForm - refForm)));
+      const outList = s.scored
+        .filter(x => x.threat > 0)
+        .sort((a, b) => b.threat - a.threat)
+        .slice(0, 6)                                    // consider the biggest attacking threats
+        .filter(x => x.av < ATK_OUT_THRESH)
+        .map(x => ({ name: x.p.web_name, label: absLabel(x.p) }));
+      out[id] = { factor: availMul * formMul, availMul, formMul, out: outList };
+    });
+    return out;
   }
 
   // Recent form factor per team id (from finished fixtures), range ~[1-FORM_MAX, 1+FORM_MAX]
@@ -430,6 +498,15 @@ select.sel:focus{border-color:var(--hope)}
                + chip("CS "+esc(ev.strAwayTeam), pr.csAway)
                + chip("Upset", pr.upset);
 
+    // Squad availability + form applied to the scoreline (×1.00 = neutral).
+    const atkFmt = f => "×" + (f == null ? 1 : f).toFixed(2);
+    const outSide = (arr, team) => (arr && arr.length)
+      ? '<b>' + esc(team) + ':</b> ' + arr.map(o => esc(o.name) + " (" + esc(o.label) + ")").join(", ")
+      : "";
+    const outStr = [outSide(pr.outHome, ev.strHomeTeam), outSide(pr.outAway, ev.strAwayTeam)]
+      .filter(Boolean).join(" · ");
+    const absent = outStr ? '<div class="absent">⚠ Doubtful/out — ' + outStr + '</div>' : '';
+
     return ''
     + '<div class="fx">'
     +   '<div class="meta">'+esc(when)+' · '+esc(ev.strVenue || "Premier League")+'</div>'
@@ -448,8 +525,10 @@ select.sel:focus{border-color:var(--hope)}
     +   '<div class="odds">'+odds+'</div>'
     +   '<div class="why">'
     +     '<span>Expected goals — <b>'+pr.lh.toFixed(2)+'</b> vs <b>'+pr.la.toFixed(2)+'</b></span>'
-    +     '<span>Other simulated scores:</span>'
+    +     '<span>Squad form — <b>'+atkFmt(pr.atkH)+'</b> vs <b>'+atkFmt(pr.atkA)+'</b></span>'
     +   '</div>'
+    +   absent
+    +   '<div class="why"><span>Other simulated scores:</span></div>'
     +   '<div class="alts">'+alts+'</div>'
     +   scorers
     + '</div>';
@@ -490,6 +569,7 @@ select.sel:focus{border-color:var(--hope)}
     const finished = FIX.filter(fx => fx.finished);
     const { teams, leagueAvg, goalsMode } = buildStrengthsFPL(teamsArr, finished);
     const form = buildForm(finished);
+    const atk = buildAttack(teamsArr, byTeam);   // squad availability + form adjustment per team
 
     const fixtures = FIX
       .filter(fx => fx.event === gw)
@@ -515,7 +595,14 @@ select.sel:focus{border-color:var(--hope)}
         strTime: ko ? pad2(ko.getHours()) + ":" + pad2(ko.getMinutes()) + ":00" : ""
       };
       const h = teams[fx.team_h], a = teams[fx.team_a];
-      const pr = predict(h, a, leagueAvg, form[fx.team_h], form[fx.team_a], hashStr(String(fx.id)));
+      const aH = atk[fx.team_h] || { factor: 1, out: [] };
+      const aA = atk[fx.team_a] || { factor: 1, out: [] };
+      // fold squad availability + form into each team's scoring via the form channel
+      const fH = (form[fx.team_h] || 1) * aH.factor;
+      const fA = (form[fx.team_a] || 1) * aA.factor;
+      const pr = predict(h, a, leagueAvg, fH, fA, hashStr(String(fx.id)));
+      pr.atkH = aH.factor; pr.atkA = aA.factor;
+      pr.outHome = aH.out; pr.outAway = aA.out;
       pr.scHome = topScorers(byTeam[fx.team_h] || [], pr.lh);
       pr.scAway = topScorers(byTeam[fx.team_a] || [], pr.la);
       if(fx.finished && fx.team_h_score != null && fx.team_a_score != null){
